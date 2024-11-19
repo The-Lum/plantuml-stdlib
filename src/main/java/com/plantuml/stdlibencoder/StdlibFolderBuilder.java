@@ -3,12 +3,10 @@ package com.plantuml.stdlibencoder;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -30,21 +28,9 @@ import net.sourceforge.plantuml.klimt.sprite.SpriteMonochrome;
 public class StdlibFolderBuilder {
 
 	/**
-	 * File representing the home repository for included data.
-	 */
-	private static final File HOME_REPX = new File(rawFolder(), "home.repx");
-
-	/**
 	 * Separator used to delineate sections within the sprite data files.
 	 */
 	private static final String SEPARATOR = "\uF8FF";
-
-	/**
-	 * Deletes the home sprite repository file.
-	 */
-	public static void deleteHomeRepx() {
-		HOME_REPX.delete();
-	}
 
 	/**
 	 * Directory containing the files to be processed.
@@ -75,8 +61,8 @@ public class StdlibFolderBuilder {
 		final File textFile = new File(rawFolder, name + "-abc.repx");
 		final File colorImagesFile = new File(rawFolder, name + "-ghi.repx");
 
-		final String infoString = readInfo(new FileInputStream(new File(dir, "INFO")));
-		System.err.println("infoString=" + infoString);
+		final String infoString = readInfo(new File(dir, "README.md"));
+		System.err.println("infoString:" + infoString.replace('\n', ' '));
 		this.texts = new DataOutputStream(new FileOutputStream(textFile));
 		texts.writeUTF(infoString);
 
@@ -93,10 +79,6 @@ public class StdlibFolderBuilder {
 			colorImagesOutputStream.close();
 			spritesOutputStream.close();
 		}
-
-		final PrintWriter pw = new PrintWriter(new FileOutputStream(HOME_REPX, true));
-		pw.println(dir.getName());
-		pw.close();
 	}
 
 	/**
@@ -113,20 +95,29 @@ public class StdlibFolderBuilder {
 	/**
 	 * Reads the content of the INFO file into a string.
 	 *
-	 * @param is The input stream from which the INFO file is read.
+	 * @param file The input stream from which the INFO file is read.
 	 * @return The content of the INFO file as a String.
 	 * @throws IOException If an error occurs while reading the file.
 	 */
-	private String readInfo(FileInputStream is) throws IOException {
-		final BufferedReader br = new BufferedReader(new InputStreamReader(is));
-		final StringBuilder sb = new StringBuilder();
-		String s;
-		while ((s = br.readLine()) != null) {
-			sb.append(s);
-			sb.append("\n");
+	private String readInfo(File file) throws IOException {
+		final StringBuilder result = new StringBuilder();
+
+		final List<String> lines = Files.readAllLines(file.toPath());
+		if (lines.get(0).equals("---") == false)
+			throw new IOException("README.md must have a YAML header");
+		for (int i = 1; i < lines.size(); i++) {
+			if (lines.get(i).equals("---"))
+				return result.toString();
+			final String[] parts = lines.get(i).split(":", 2);
+			if (parts.length == 2) {
+				final String key = parts[0].trim();
+				final String value = parts[1].trim();
+				result.append(key).append("=").append(value).append("\n");
+			} else {
+				throw new IOException("Invalid YAML line: " + lines.get(i));
+			}
 		}
-		br.close();
-		return sb.toString();
+		throw new IOException("Bad YAML header in README.md");
 	}
 
 	private void processDir(File dir) throws IOException {
